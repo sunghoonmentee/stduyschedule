@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>순공 플래너 — 주간 공부계획표</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#191d33; --panel2:#20254173; --line:#2b3155;
+    --text:#e8eaf5; --muted:#9aa0c3; --accent:#6c7dff; --accent2:#4ad7c4;
+    --warn:#ff7a90; --good:#4ade80; --gold:#ffd166; --shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Malgun Gothic','맑은 고딕',system-ui,-apple-system,sans-serif;
+    background:radial-gradient(1200px 700px at 80% -10%, #1c2a5555, transparent),
+               radial-gradient(1000px 600px at -10% 110%, #17324a55, transparent), var(--bg);
+    color:var(--text); min-height:100vh; padding:20px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand .logo{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:24px;box-shadow:var(--shadow)}
+  .brand h1{font-size:22px;letter-spacing:-.5px}
+  .brand p{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .tabs{display:flex;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:5px}
+  .tabs button{background:transparent;border:none;color:var(--muted);padding:8px 16px;border-radius:9px;
+    cursor:pointer;font-size:14px;font-weight:700;font-family:inherit;transition:.15s}
+  .tabs button.on{background:linear-gradient(135deg,var(--accent),#8a7dff);color:#fff}
+
+  .btn{background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:8px 14px;border-radius:11px;cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:.15s}
+  .btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),#8a7dff);border:none;color:#fff}
+  .btn.ghost{background:transparent}
+  .btn.green{background:linear-gradient(135deg,#22c55e,#4ade80);border:none;color:#04210f}
+  .btn.red{background:linear-gradient(135deg,#ef4444,#ff7a90);border:none;color:#fff}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  /* ===== TIMER ===== */
+  .timer{background:linear-gradient(135deg,#1b2140,#191d33);border:1px solid var(--line);
+    border-radius:20px;padding:18px 20px;box-shadow:var(--shadow);margin-bottom:18px;
+    display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
+  .timer .clock{text-align:center;min-width:230px}
+  .timer .time{font-size:52px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;
+    line-height:1;color:var(--accent2)}
+  .timer.run .time{color:var(--good)}
+  .timer .state{font-size:12.5px;color:var(--muted);margin-top:6px;height:16px}
+  .timer .ctrls{display:flex;gap:9px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .timer .ctrls .btn{padding:10px 18px}
+  .timer .cfg{display:grid;gap:11px}
+  .timer .cfg .fr{display:grid;grid-template-columns:78px 1fr;align-items:center;gap:10px}
+  .timer .cfg label{font-size:13px;color:var(--muted);font-weight:600}
+  .timer select,.timer input{background:#12152a;border:1px solid var(--line);color:var(--text);
+    padding:10px 12px;border-radius:11px;font-size:14px;font-family:inherit;width:100%}
+  .timer select:focus,.timer input:focus{outline:none;border-color:var(--accent)}
+  .timer .hint{font-size:12px;color:var(--muted);line-height:1.6}
+  .timer .hint b{color:var(--accent2)}
+
+  /* ===== WEEK NAV ===== */
+  .weekbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+  .weekbar .range{font-size:19px;font-weight:800;letter-spacing:-.5px}
+  .weekbar .range small{font-size:13px;color:var(--muted);font-weight:600;margin-left:8px}
+  .weektot{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:7px 14px;
+    font-size:13px;font-weight:700}
+  .weektot b{color:var(--accent2);font-size:15px}
+  .nav{display:flex;gap:8px;align-items:center}
+
+  /* ===== WEEK GRID ===== */
+  .week{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+  .day{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:11px;
+    display:flex;flex-direction:column;min-height:230px}
+  .day.today{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2) inset}
+  .day.sun .dname{color:#ff8a9e}.day.sat .dname{color:#7fb0ff}
+  .day .dhead{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px}
+  .day .dname{font-size:14px;font-weight:800}
+  .day .ddate{font-size:11px;color:var(--muted)}
+  .day .studied{font-size:12px;font-weight:800;color:var(--accent2);text-align:center;
+    background:var(--panel2);border-radius:9px;padding:6px;margin-bottom:10px}
+  .day .studied.zero{color:var(--muted)}
+  .plans{flex:1;display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
+  .plan{display:flex;align-items:center;gap:7px;background:#12152a;border:1px solid var(--line);
+    border-radius:9px;padding:6px 8px;font-size:12.5px}
+  .plan .cb{width:17px;height:17px;border-radius:5px;border:2px solid var(--line);cursor:pointer;
+    flex:0 0 auto;display:grid;place-items:center;font-size:11px;color:transparent}
+  .plan.done .cb{background:var(--good);border-color:var(--good);color:#04210f}
+  .plan .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .plan.done .nm{text-decoration:line-through;color:var(--muted)}
+  .plan .x{color:var(--warn);cursor:pointer;font-size:14px;opacity:.7}
+  .plan .x:hover{opacity:1}
+  .addplan{display:flex;gap:5px}
+  .addplan input{flex:1;background:#12152a;border:1px solid var(--line);color:var(--text);
+    padding:7px 9px;border-radius:9px;font-size:12.5px;font-family:inherit;min-width:0}
+  .addplan input:focus{outline:none;border-color:var(--accent)}
+  .addplan button{background:var(--accent);border:none;color:#fff;border-radius:9px;width:30px;
+    cursor:pointer;font-size:16px;flex:0 0 auto}
+
+  /* ===== CALENDAR (history) ===== */
+  .calbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .calbar .month{font-size:20px;font-weight:800}
+  .cal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:var(--shadow)}
+  .dow{display:grid;grid-template-columns:40px repeat(7,1fr);margin-bottom:8px}
+  .dow div{text-align:center;font-size:12px;color:var(--muted);font-weight:700;padding:5px 0}
+  .cgrid{display:grid;gap:6px}
+  .crow{display:grid;grid-template-columns:40px repeat(7,1fr);gap:6px}
+  .csum{background:var(--panel2);border:1px solid var(--line);border-radius:10px;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:var(--muted);padding:4px}
+  .csum b{font-size:12px;color:var(--gold);display:block}
+  .ccell{min-height:74px;background:var(--panel2);border-radius:10px;padding:6px;position:relative;border:1px solid transparent}
+  .ccell.other{opacity:.32}
+  .ccell.today{border-color:var(--accent2)}
+  .ccell .cn{font-size:11px;font-weight:700;color:var(--muted)}
+  .ccell .ch{font-size:15px;font-weight:800;color:var(--accent2);margin-top:3px}
+  .ccell .cp{font-size:9.5px;color:var(--muted);position:absolute;bottom:5px;left:6px}
+  .ccell .ring{position:absolute;bottom:5px;right:6px;width:20px;height:20px;border-radius:50%;
+    background:conic-gradient(var(--good) var(--p),#2b3155 0)}
+  .ccell .ring i{position:absolute;inset:3px;border-radius:50%;background:var(--panel);
+    display:grid;place-items:center;font-size:8px;font-style:normal;color:var(--good);font-weight:800}
+  .heatmap{margin-top:10px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;justify-content:flex-end}
+  .heatmap .sw{width:13px;height:13px;border-radius:3px}
+
+  .tip{background:var(--panel2);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;
+    font-size:12.5px;color:var(--muted);margin-top:16px;line-height:1.7}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+  .hide{display:none}
+  @media(max-width:820px){
+    .timer{grid-template-columns:1fr}
+    .week{grid-template-columns:repeat(2,1fr)}
+  }
+  @media(max-width:520px){
+    .week{grid-template-columns:1fr}
+    .timer .time{font-size:44px}
+    .dow,.crow{grid-template-columns:26px repeat(7,1fr)}
+    .ccell{min-height:56px}
+    .ccell .ring{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo">📚</div>
+      <div><h1>순공 플래너</h1><p>예비 고1의 주간 순공시간 관리</p></div>
+    </div>
+    <div class="tabs">
+      <button id="tabWeek" class="on" onclick="switchTab('week')">🗓️ 주간 계획표</button>
+      <button id="tabCal" onclick="switchTab('cal')">📅 달력 기록</button>
+    </div>
+  </header>
+
+  <!-- ============ TIMER ============ -->
+  <div class="timer" id="timerBox">
+    <div class="clock">
+      <div class="time" id="tDisp">00:00:00</div>
+      <div class="state" id="tState">순공 타이머 준비됨</div>
+      <div class="ctrls">
+        <button class="btn green" id="tStart" onclick="timerStart()">▶ 시작</button>
+        <button class="btn" id="tPause" onclick="timerPause()" disabled>⏸ 일시정지</button>
+        <button class="btn red" id="tStop" onclick="timerStop()" disabled>⏹ 정지 · 기록</button>
+      </div>
+    </div>
+    <div class="cfg">
+      <div class="fr"><label>기록할 날</label><select id="tDay"></select></div>
+      <div class="fr"><label>과목</label><select id="tSubj"></select></div>
+      <div class="hint">
+        ▶ 시작하면 시간이 올라가고, <b>⏹ 정지·기록</b>을 누르면 잰 시간이 그 날 순공시간에
+        <b>누적</b>돼요. 타이머를 다시 써도 계속 더해집니다. 💪
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WEEKLY PLANNER ============ -->
+  <div id="viewWeek">
+    <div class="weekbar">
+      <div class="range" id="weekRange"></div>
+      <div class="nav">
+        <div class="weektot" id="weekTot">주 합계 <b>0시간</b></div>
+        <button class="btn" onclick="moveWeek(-1)">‹ 지난주</button>
+        <button class="btn ghost" onclick="thisWeek()">이번 주</button>
+        <button class="btn" onclick="moveWeek(1)">다음주 ›</button>
+      </div>
+    </div>
+    <div class="week" id="weekGrid"></div>
+    <div class="tip">💡 각 요일 칸에 <b>하고 싶은 과목</b>을 적어두고(엔터 또는 + 버튼), 공부를 끝내면
+      체크(✓)해서 완료 표시해요. 위 타이머로 실제 순공시간을 재서 기록하면 자동으로 쌓입니다.</div>
+  </div>
+
+  <!-- ============ CALENDAR HISTORY ============ -->
+  <div id="viewCal" class="hide">
+    <div class="calbar">
+      <div class="month" id="monthLabel"></div>
+      <div class="nav">
+        <button class="btn" onclick="moveMonth(-1)">‹ 이전</button>
+        <button class="btn ghost" onclick="thisMonth()">이번 달</button>
+        <button class="btn" onclick="moveMonth(1)">다음 ›</button>
+      </div>
+    </div>
+    <div class="cal">
+      <div class="dow"><div>주</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div><div>일</div></div>
+      <div class="cgrid" id="calGrid"></div>
+      <div class="heatmap">
+        <span>적음</span>
+        <span class="sw" style="background:#2b3155"></span>
+        <span class="sw" style="background:#2f5a5e"></span>
+        <span class="sw" style="background:#2f8f7a"></span>
+        <span class="sw" style="background:#3fcf8e"></span>
+        <span class="sw" style="background:#8affc1"></span>
+        <span>많음 (순공시간)</span>
+      </div>
+    </div>
+    <div class="tip">💡 <b>주(週)</b> 칸에는 그 주의 <b>총 순공시간</b>과 <b>계획 완료율</b>이 나와요.
+      한 주가 끝나면 여기서 "이번 주 얼마나 했는지" 한눈에 돌아볼 수 있어요.</div>
+  </div>
+
+  <footer>
+    데이터는 이 브라우저에 자동 저장돼요 (localStorage).
+    <button class="btn ghost" style="margin-left:6px" onclick="exportData()">백업</button>
+    <button class="btn ghost" onclick="document.getElementById('impFile').click()">불러오기</button>
+    <input type="file" id="impFile" accept="application/json" class="hide" onchange="importData(event)">
+  </footer>
+</div>
+
+<script>
+/* ================= DATA ================= */
+const KEY='sungong_weekly_v1';
+// data.days[ymd] = { plans:[{name,done}], seconds:Number, sessions:[{subj,sec,at}] }
+let data=JSON.parse(localStorage.getItem(KEY)||'{}');
+if(!data.days)data.days={};
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+const day=k=>(data.days[k]=data.days[k]||{plans:[],seconds:0,sessions:[]});
+
+const SUBJECTS=['국어','수학','영어','과학','사회','한국사','제2외국어','탐구','기타'];
+const DOW=['월','화','수','목','금','토','일'];
+
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parseYmd=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
+function mondayOf(d){const x=new Date(d);const g=(x.getDay()+6)%7;x.setDate(x.getDate()-g);x.setHours(0,0,0,0);return x;}
+const secToHM=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?`${h}시간 ${m}분`:`${m}분`;};
+const secToClock=s=>`${pad(Math.floor(s/3600))}:${pad(Math.floor(s%3600/60))}:${pad(Math.floor(s%60))}`;
+const daySec=k=>data.days[k]?data.days[k].seconds:0;
+
+let weekRef=mondayOf(new Date());   // Monday of shown week
+let monthRef=(()=>{const d=new Date();d.setDate(1);return d;})();
+
+/* ================= WEEKLY VIEW ================= */
+function renderWeek(){
+  const grid=document.getElementById('weekGrid');grid.innerHTML='';
+  const todayKey=ymd(new Date());
+  let weekTotal=0;
+  for(let i=0;i<7;i++){
+    const d=new Date(weekRef);d.setDate(weekRef.getDate()+i);
+    const key=ymd(d),rec=data.days[key]||{plans:[],seconds:0};
+    weekTotal+=rec.seconds||0;
+    const el=document.createElement('div');
+    el.className='day'+(key===todayKey?' today':'')+(i===5?' sat':'')+(i===6?' sun':'');
+    const sec=rec.seconds||0;
+    let plansHtml=(rec.plans||[]).map((p,idx)=>`
+      <div class="plan${p.done?' done':''}">
+        <div class="cb" onclick="togglePlan('${key}',${idx})">✓</div>
+        <div class="nm" title="${p.name}">${p.name}</div>
+        <div class="x" onclick="delPlan('${key}',${idx})">✕</div>
+      </div>`).join('');
+    el.innerHTML=`
+      <div class="dhead"><div class="dname">${DOW[i]}</div><div class="ddate">${d.getMonth()+1}/${d.getDate()}</div></div>
+      <div class="studied${sec?'':' zero'}">⏱ ${sec?secToHM(sec):'0분'}</div>
+      <div class="plans">${plansHtml||'<div style="font-size:11px;color:var(--muted);text-align:center;padding:6px 0">하고 싶은 과목을<br>적어보세요</div>'}</div>
+      <div class="addplan">
+        <input placeholder="과목 추가" onkeydown="if(event.key==='Enter')addPlan('${key}',this)">
+        <button onclick="addPlan('${key}',this.previousElementSibling)">+</button>
+      </div>`;
+    grid.appendChild(el);
+  }
+  const ws=new Date(weekRef),we=new Date(weekRef);we.setDate(ws.getDate()+6);
+  document.getElementById('weekRange').innerHTML=
+    `${ws.getMonth()+1}월 ${ws.getDate()}일 ~ ${we.getMonth()+1}월 ${we.getDate()}일 <small>(${ws.getFullYear()})</small>`;
+  document.getElementById('weekTot').innerHTML=`주 합계 <b>${secToHM(weekTotal)||'0분'}</b>`;
+  refreshTimerDaySelect();
+}
+function addPlan(key,input){
+  const v=input.value.trim();if(!v)return;
+  day(key).plans.push({name:v,done:false});save();input.value='';renderWeek();
+}
+function togglePlan(key,idx){const p=day(key).plans[idx];p.done=!p.done;save();renderWeek();}
+function delPlan(key,idx){day(key).plans.splice(idx,1);save();renderWeek();}
+function moveWeek(n){weekRef.setDate(weekRef.getDate()+n*7);renderWeek();}
+function thisWeek(){weekRef=mondayOf(new Date());renderWeek();}
+
+/* ================= TIMER ================= */
+let tRun=false,tStartEpoch=0,tAccum=0,tInt=null;
+function refreshTimerDaySelect(){
+  const sel=document.getElementById('tDay');const prev=sel.value;
+  sel.innerHTML='';
+  for(let i=0;i<7;i++){
+    const d=new Date(weekRef);d.setDate(weekRef.getDate()+i);
+    const key=ymd(d);const o=document.createElement('option');o.value=key;
+    o.textContent=`${DOW[i]} (${d.getMonth()+1}/${d.getDate()})`;sel.appendChild(o);
+  }
+  const todayKey=ymd(new Date());
+  sel.value=(prev&&[...sel.options].some(o=>o.value===prev))?prev
+           :([...sel.options].some(o=>o.value===todayKey)?todayKey:sel.options[0].value);
+  syncSubjOptions();
+}
+function syncSubjOptions(){
+  const sel=document.getElementById('tSubj');const prev=sel.value;sel.innerHTML='';
+  const key=document.getElementById('tDay').value;
+  const plans=(data.days[key]?.plans||[]).map(p=>p.name);
+  const list=[...new Set([...plans,...SUBJECTS])];
+  list.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sel.appendChild(o);});
+  if(prev&&list.includes(prev))sel.value=prev;
+}
+function tElapsed(){return tAccum+(tRun?(Date.now()-tStartEpoch)/1000:0);}
+function tRender(){document.getElementById('tDisp').textContent=secToClock(tElapsed());}
+function timerStart(){
+  if(tRun)return;tRun=true;tStartEpoch=Date.now();
+  document.getElementById('timerBox').classList.add('run');
+  document.getElementById('tState').textContent='⏳ 집중하는 중… 화이팅!';
+  document.getElementById('tStart').disabled=true;
+  document.getElementById('tPause').disabled=false;
+  document.getElementById('tStop').disabled=false;
+  document.getElementById('tDay').disabled=true;
+  tInt=setInterval(tRender,250);tRender();
+}
+function timerPause(){
+  if(!tRun)return;tAccum+=(Date.now()-tStartEpoch)/1000;tRun=false;clearInterval(tInt);
+  document.getElementById('timerBox').classList.remove('run');
+  document.getElementById('tState').textContent='⏸ 일시정지됨 — 다시 시작하면 이어져요';
+  document.getElementById('tStart').disabled=false;
+  document.getElementById('tPause').disabled=true;
+  tRender();
+}
+function timerStop(){
+  const secs=Math.round(tElapsed());
+  if(secs<1){resetTimer();return;}
+  const key=document.getElementById('tDay').value;
+  const subj=document.getElementById('tSubj').value;
+  const rec=day(key);
+  rec.seconds=(rec.seconds||0)+secs;                       // 누적
+  rec.sessions.push({subj,sec:secs,at:Date.now()});
+  save();
+  document.getElementById('tState').textContent=`✅ ${subj} ${secToHM(secs)} 기록됨! (누적 ${secToHM(rec.seconds)})`;
+  resetTimer(true);renderWeek();if(!document.getElementById('viewCal').classList.contains('hide'))renderCal();
+}
+function resetTimer(keepMsg){
+  tRun=false;tAccum=0;clearInterval(tInt);
+  document.getElementById('timerBox').classList.remove('run');
+  document.getElementById('tDisp').textContent='00:00:00';
+  if(!keepMsg)document.getElementById('tState').textContent='순공 타이머 준비됨';
+  document.getElementById('tStart').disabled=false;
+  document.getElementById('tPause').disabled=true;
+  document.getElementById('tStop').disabled=true;
+  document.getElementById('tDay').disabled=false;
+}
+document.getElementById('tDay').addEventListener('change',syncSubjOptions);
+
+/* ================= CALENDAR HISTORY ================= */
+function renderCal(){
+  const y=monthRef.getFullYear(),m=monthRef.getMonth();
+  document.getElementById('monthLabel').textContent=`${y}년 ${m+1}월`;
+  const grid=document.getElementById('calGrid');grid.innerHTML='';
+  const first=new Date(y,m,1),start=mondayOf(first);
+  const todayKey=ymd(new Date());
+  for(let w=0;w<6;w++){
+    const rowStart=new Date(start);rowStart.setDate(start.getDate()+w*7);
+    if(w>0&&rowStart.getMonth()!==m&&!(rowStart<first)&&rowStart.getDate()>7&&rowStart.getMonth()>m)break;
+    const row=document.createElement('div');row.className='crow';
+    // week summary cell
+    let wSec=0,wDone=0,wPlan=0,inMonth=false;
+    for(let i=0;i<7;i++){const d=new Date(rowStart);d.setDate(rowStart.getDate()+i);
+      const rec=data.days[ymd(d)];if(rec){wSec+=rec.seconds||0;(rec.plans||[]).forEach(p=>{wPlan++;if(p.done)wDone++;});}
+      if(d.getMonth()===m)inMonth=true;}
+    const pct=wPlan?Math.round(wDone/wPlan*100):0;
+    const sc=document.createElement('div');sc.className='csum';
+    sc.innerHTML=wSec||wPlan?`<b>${(wSec/3600).toFixed(1)}h</b>${wPlan?`<span>${pct}%</span>`:''}`:'<span>-</span>';
+    row.appendChild(sc);
+    // days
+    for(let i=0;i<7;i++){
+      const d=new Date(rowStart);d.setDate(rowStart.getDate()+i);
+      const key=ymd(d),rec=data.days[key];const sec=rec?rec.seconds||0:0;const hrs=sec/3600;
+      const cell=document.createElement('div');
+      cell.className='ccell'+(d.getMonth()!==m?' other':'')+(key===todayKey?' today':'');
+      const bg=hrs<=0?'#2b3155':hrs<1?'#2f5a5e':hrs<3?'#2f8f7a':hrs<5?'#3fcf8e':'#8affc1';
+      if(hrs>0)cell.style.background=bg+(hrs<3?'':'');
+      let ring='';
+      if(rec&&rec.plans&&rec.plans.length){
+        const dn=rec.plans.filter(p=>p.done).length,tp=rec.plans.length,p=Math.round(dn/tp*360);
+        ring=`<div class="ring" style="--p:${p}deg" title="계획 ${dn}/${tp} 완료"><i>${dn}/${tp}</i></div>`;
+      }
+      cell.innerHTML=`<div class="cn" style="${hrs>=3?'color:#04210f':''}">${d.getDate()}</div>`+
+        (sec?`<div class="ch" style="${hrs>=3?'color:#04210f':''}">${hrs.toFixed(1)}h</div>`:'')+ring;
+      row.appendChild(cell);
+    }
+    grid.appendChild(row);
+    if(rowStart.getMonth()>m&&rowStart.getFullYear()>=y)break;
+  }
+}
+function moveMonth(n){monthRef.setMonth(monthRef.getMonth()+n);renderCal();}
+function thisMonth(){monthRef=new Date();monthRef.setDate(1);renderCal();}
+
+/* ================= TABS ================= */
+function switchTab(t){
+  const w=t==='week';
+  document.getElementById('viewWeek').classList.toggle('hide',!w);
+  document.getElementById('viewCal').classList.toggle('hide',w);
+  document.getElementById('tabWeek').classList.toggle('on',w);
+  document.getElementById('tabCal').classList.toggle('on',!w);
+  if(w)renderWeek();else renderCal();
+}
+
+/* ================= BACKUP ================= */
+function exportData(){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`순공플래너_백업_${ymd(new Date())}.json`;a.click();
+}
+function importData(e){
+  const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{try{const o=JSON.parse(r.result);if(o.days)data=o;else data.days={...data.days,...o};
+    save();renderWeek();renderCal();alert('불러오기 완료!');}catch{alert('파일을 읽을 수 없어요');}};
+  r.readAsText(f);
+}
+window.addEventListener('beforeunload',e=>{if(tRun){e.preventDefault();e.returnValue='';}});
+
+renderWeek();
+</script>
+</body>
+</html>
