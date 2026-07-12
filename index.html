@@ -108,18 +108,19 @@
   .calbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .calbar .month{font-size:20px;font-weight:800}
   .cal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;box-shadow:var(--shadow)}
-  .dow{display:grid;grid-template-columns:40px repeat(7,1fr);margin-bottom:8px}
+  .dow{display:grid;grid-template-columns:52px repeat(7,1fr);margin-bottom:8px}
   .dow div{text-align:center;font-size:12px;color:var(--muted);font-weight:700;padding:5px 0}
   .cgrid{display:grid;gap:6px}
-  .crow{display:grid;grid-template-columns:40px repeat(7,1fr);gap:6px}
+  .crow{display:grid;grid-template-columns:52px repeat(7,1fr);gap:6px}
   .csum{background:var(--panel2);border:1px solid var(--line);border-radius:10px;display:flex;
-    flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:var(--muted);padding:4px}
-  .csum b{font-size:12px;color:var(--gold);display:block}
+    flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:var(--muted);padding:4px;text-align:center}
+  .csum b{font-size:11px;color:var(--gold);display:block;line-height:1.2}
   .ccell{min-height:74px;background:var(--panel2);border-radius:10px;padding:6px;position:relative;border:1px solid transparent}
   .ccell.other{opacity:.32}
   .ccell.today{border-color:var(--accent2)}
   .ccell .cn{font-size:11px;font-weight:700;color:var(--muted)}
-  .ccell .ch{font-size:15px;font-weight:800;color:var(--accent2);margin-top:3px}
+  .ccell .ch{font-size:12.5px;font-weight:800;color:var(--accent2);margin-top:3px;line-height:1.15;
+    word-break:keep-all;padding-right:20px}
   .ccell .cp{font-size:9.5px;color:var(--muted);position:absolute;bottom:5px;left:6px}
   .ccell .ring{position:absolute;bottom:5px;right:6px;width:20px;height:20px;border-radius:50%;
     background:conic-gradient(var(--good) var(--p),#2b3155 0)}
@@ -139,9 +140,11 @@
   @media(max-width:520px){
     .week{grid-template-columns:1fr}
     .tclock .time{font-size:28px}
-    .dow,.crow{grid-template-columns:26px repeat(7,1fr)}
+    .dow,.crow{grid-template-columns:34px repeat(7,1fr)}
     .ccell{min-height:56px}
     .ccell .ring{display:none}
+    .ccell .ch{font-size:11px;padding-right:0}
+    .csum b{font-size:10px}
   }
 </style>
 </head>
@@ -444,6 +447,9 @@ $('tDay').addEventListener('change',syncSubjOptions);
 $('tMin').addEventListener('input',()=>{if(timerIdle())resetDisplay();});
 
 /* ================= CALENDAR HISTORY ================= */
+// 정확한 시·분 표기 (예: 45분, 1시간 5분, 3시간)
+function hmCompact(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60);
+  if(h&&m)return `${h}시간 ${m}분`;if(h)return `${h}시간`;if(m)return `${m}분`;return '0분';}
 function renderCal(){
   const y=monthRef.getFullYear(),m=monthRef.getMonth();
   document.getElementById('monthLabel').textContent=`${y}년 ${m+1}월`;
@@ -461,7 +467,7 @@ function renderCal(){
       if(d.getMonth()===m)inMonth=true;}
     const pct=wPlan?Math.round(wDone/wPlan*100):0;
     const sc=document.createElement('div');sc.className='csum';
-    sc.innerHTML=wSec||wPlan?`<b>${(wSec/3600).toFixed(1)}h</b>${wPlan?`<span>${pct}%</span>`:''}`:'<span>-</span>';
+    sc.innerHTML=wSec||wPlan?`<b>${hmCompact(wSec)}</b>${wPlan?`<span>${pct}%</span>`:''}`:'<span>-</span>';
     row.appendChild(sc);
     // days
     for(let i=0;i<7;i++){
@@ -477,7 +483,7 @@ function renderCal(){
         ring=`<div class="ring" style="--p:${p}deg" title="계획 ${dn}/${tp} 완료"><i>${dn}/${tp}</i></div>`;
       }
       cell.innerHTML=`<div class="cn" style="${hrs>=3?'color:#04210f':''}">${d.getDate()}</div>`+
-        (sec?`<div class="ch" style="${hrs>=3?'color:#04210f':''}">${hrs.toFixed(1)}h</div>`:'')+ring;
+        (sec?`<div class="ch" style="${hrs>=3?'color:#04210f':''}">${hmCompact(sec)}</div>`:'')+ring;
       row.appendChild(cell);
     }
     grid.appendChild(row);
