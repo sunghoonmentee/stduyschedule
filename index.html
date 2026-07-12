@@ -226,9 +226,12 @@
   </div>
 
   <footer>
-    데이터는 이 브라우저에 자동 저장돼요 (localStorage).
-    <button class="btn ghost" style="margin-left:6px" onclick="exportData()">백업</button>
-    <button class="btn ghost" onclick="document.getElementById('impFile').click()">불러오기</button>
+    <div style="font-size:13px;color:var(--good);font-weight:700">✅ 기록은 자동 저장돼요 — 다음에 그냥 열면 그대로 이어집니다.</div>
+    <div style="margin-top:9px;font-size:11.5px;color:var(--muted)">
+      다른 기기·브라우저로 옮기거나 안전하게 보관할 때만 사용하세요 👇<br>
+      <button class="btn ghost" style="margin-top:7px" onclick="exportData()">💾 기록 파일로 내보내기</button>
+      <button class="btn ghost" style="margin-top:7px" onclick="document.getElementById('impFile').click()">📂 파일에서 가져오기</button>
+    </div>
     <input type="file" id="impFile" accept="application/json" class="hide" onchange="importData(event)">
   </footer>
 </div>
