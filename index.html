@@ -40,23 +40,31 @@
 
   /* ===== TIMER ===== */
   .timer{background:linear-gradient(135deg,#1b2140,#191d33);border:1px solid var(--line);
-    border-radius:20px;padding:18px 20px;box-shadow:var(--shadow);margin-bottom:18px;
-    display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center}
-  .timer .clock{text-align:center;min-width:230px}
-  .timer .time{font-size:52px;font-weight:800;letter-spacing:1px;font-variant-numeric:tabular-nums;
-    line-height:1;color:var(--accent2)}
+    border-radius:16px;padding:12px 16px;box-shadow:var(--shadow);margin-bottom:18px;
+    display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px}
+  .timer.run{border-color:var(--good)}
+  .timer.breakmode.run{border-color:var(--gold)}
+  .tmode{display:flex;gap:4px;background:#12152a;border:1px solid var(--line);border-radius:10px;padding:4px}
+  .tmode button{background:transparent;border:none;color:var(--muted);padding:6px 12px;border-radius:7px;
+    cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;transition:.12s}
+  .tmode button.on{background:var(--accent);color:#fff}
+  #modeBreak.on{background:var(--gold);color:#3a2e00}
+  .tclock{min-width:116px;text-align:center}
+  .tclock .time{font-size:32px;font-weight:800;letter-spacing:.5px;font-variant-numeric:tabular-nums;
+    line-height:1.05;color:var(--accent2)}
   .timer.run .time{color:var(--good)}
-  .timer .state{font-size:12.5px;color:var(--muted);margin-top:6px;height:16px}
-  .timer .ctrls{display:flex;gap:9px;justify-content:center;margin-top:14px;flex-wrap:wrap}
-  .timer .ctrls .btn{padding:10px 18px}
-  .timer .cfg{display:grid;gap:11px}
-  .timer .cfg .fr{display:grid;grid-template-columns:78px 1fr;align-items:center;gap:10px}
-  .timer .cfg label{font-size:13px;color:var(--muted);font-weight:600}
-  .timer select,.timer input{background:#12152a;border:1px solid var(--line);color:var(--text);
-    padding:10px 12px;border-radius:11px;font-size:14px;font-family:inherit;width:100%}
-  .timer select:focus,.timer input:focus{outline:none;border-color:var(--accent)}
-  .timer .hint{font-size:12px;color:var(--muted);line-height:1.6}
-  .timer .hint b{color:var(--accent2)}
+  .timer.breakmode .time{color:var(--gold)}
+  .tclock .state{font-size:11.5px;color:var(--muted);margin-top:4px;min-height:15px}
+  .tcfg{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+  .tcfg .fr{display:flex;flex-direction:column;gap:4px}
+  .tcfg label{font-size:11px;color:var(--muted);font-weight:600}
+  .tcfg input,.tcfg select{background:#12152a;border:1px solid var(--line);color:var(--text);
+    padding:8px 10px;border-radius:10px;font-size:13.5px;font-family:inherit}
+  .tcfg input:focus,.tcfg select:focus{outline:none;border-color:var(--accent)}
+  #tMin{width:118px}
+  .timer.breakmode .studyOnly{display:none}
+  .timer .ctrls{display:flex;gap:7px;margin-left:auto}
+  .timer .ctrls .btn{padding:9px 14px}
 
   /* ===== WEEK NAV ===== */
   .weekbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px}
@@ -125,12 +133,12 @@
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
   .hide{display:none}
   @media(max-width:820px){
-    .timer{grid-template-columns:1fr}
     .week{grid-template-columns:repeat(2,1fr)}
+    .timer .ctrls{margin-left:0}
   }
   @media(max-width:520px){
     .week{grid-template-columns:1fr}
-    .timer .time{font-size:44px}
+    .tclock .time{font-size:28px}
     .dow,.crow{grid-template-columns:26px repeat(7,1fr)}
     .ccell{min-height:56px}
     .ccell .ring{display:none}
@@ -152,22 +160,24 @@
 
   <!-- ============ TIMER ============ -->
   <div class="timer" id="timerBox">
-    <div class="clock">
-      <div class="time" id="tDisp">00:00:00</div>
-      <div class="state" id="tState">순공 타이머 준비됨</div>
-      <div class="ctrls">
-        <button class="btn green" id="tStart" onclick="timerStart()">▶ 시작</button>
-        <button class="btn" id="tPause" onclick="timerPause()" disabled>⏸ 일시정지</button>
-        <button class="btn red" id="tStop" onclick="timerStop()" disabled>⏹ 정지 · 기록</button>
-      </div>
+    <div class="tmode">
+      <button id="modeStudy" class="on" onclick="setMode('study')">📖 순공</button>
+      <button id="modeBreak" onclick="setMode('break')">☕ 휴식</button>
     </div>
-    <div class="cfg">
-      <div class="fr"><label>기록할 날</label><select id="tDay"></select></div>
-      <div class="fr"><label>과목</label><select id="tSubj"></select></div>
-      <div class="hint">
-        ▶ 시작하면 시간이 올라가고, <b>⏹ 정지·기록</b>을 누르면 잰 시간이 그 날 순공시간에
-        <b>누적</b>돼요. 타이머를 다시 써도 계속 더해집니다. 💪
-      </div>
+    <div class="tclock">
+      <div class="time" id="tDisp">00:00</div>
+      <div class="state" id="tState">순공 타이머 준비됨</div>
+    </div>
+    <div class="tcfg">
+      <div class="fr"><label id="minLabel">시간(분)</label>
+        <input id="tMin" type="number" min="1" max="600" inputmode="numeric" placeholder="비우면 스톱워치"></div>
+      <div class="fr studyOnly"><label>기록할 날</label><select id="tDay"></select></div>
+      <div class="fr studyOnly"><label>과목</label><select id="tSubj"></select></div>
+    </div>
+    <div class="ctrls">
+      <button class="btn green" id="tStart" onclick="timerStart()">▶ 시작</button>
+      <button class="btn" id="tPause" onclick="timerPause()" disabled>⏸</button>
+      <button class="btn red" id="tStop" onclick="timerStop()" disabled>⏹ 정지</button>
     </div>
   </div>
 
@@ -184,7 +194,8 @@
     </div>
     <div class="week" id="weekGrid"></div>
     <div class="tip">💡 각 요일 칸에 <b>하고 싶은 과목</b>을 적어두고(엔터 또는 + 버튼), 공부를 끝내면
-      체크(✓)해서 완료 표시해요. 위 타이머로 실제 순공시간을 재서 기록하면 자동으로 쌓입니다.</div>
+      체크(✓)해서 완료 표시해요. 위 타이머의 <b>📖순공</b> 모드로 잰 시간은 그 날 순공시간에 자동으로 쌓이고,
+      쉴 땐 <b>☕휴식</b> 모드로 분(예: 10)을 입력하면 카운트다운 후 소리로 알려줘요.</div>
   </div>
 
   <!-- ============ CALENDAR HISTORY ============ -->
@@ -288,10 +299,17 @@ function delPlan(key,idx){day(key).plans.splice(idx,1);save();renderWeek();}
 function moveWeek(n){weekRef.setDate(weekRef.getDate()+n*7);renderWeek();}
 function thisWeek(){weekRef=mondayOf(new Date());renderWeek();}
 
-/* ================= TIMER ================= */
-let tRun=false,tStartEpoch=0,tAccum=0,tInt=null;
+/* ================= TIMER (순공 스톱워치/카운트다운 + 휴식) ================= */
+let tMode='study';                                 // 'study' | 'break'
+let tRun=false,tStartEpoch=0,tAccum=0,tInt=null,tTarget=0; // tTarget: 0=스톱워치, >0=카운트다운(초)
+let audioCtx=null;
+const $=id=>document.getElementById(id);
+const timerIdle=()=>!tRun && tAccum===0;
+function fmtClock(sec){sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return h?`${h}:${pad(m)}:${pad(s)}`:`${pad(m)}:${pad(s)}`;}
+
 function refreshTimerDaySelect(){
-  const sel=document.getElementById('tDay');const prev=sel.value;
+  const sel=$('tDay');const prev=sel.value;
   sel.innerHTML='';
   for(let i=0;i<7;i++){
     const d=new Date(weekRef);d.setDate(weekRef.getDate()+i);
@@ -304,56 +322,123 @@ function refreshTimerDaySelect(){
   syncSubjOptions();
 }
 function syncSubjOptions(){
-  const sel=document.getElementById('tSubj');const prev=sel.value;sel.innerHTML='';
-  const key=document.getElementById('tDay').value;
+  const sel=$('tSubj');const prev=sel.value;sel.innerHTML='';
+  const key=$('tDay').value;
   const plans=(data.days[key]?.plans||[]).map(p=>p.name);
   const list=[...new Set([...plans,...SUBJECTS])];
   list.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sel.appendChild(o);});
   if(prev&&list.includes(prev))sel.value=prev;
 }
+
+function setMode(m){
+  if(!timerIdle()){$('tState').textContent='타이머를 먼저 ⏹정지해줘';return;}
+  tMode=m;
+  $('modeStudy').classList.toggle('on',m==='study');
+  $('modeBreak').classList.toggle('on',m==='break');
+  $('timerBox').classList.toggle('breakmode',m==='break');
+  const min=$('tMin');
+  if(m==='break'){if(!(parseInt(min.value)>0))min.value=10;min.placeholder='예: 10';}
+  else{min.placeholder='비우면 스톱워치';}
+  $('tState').textContent=m==='break'?'휴식 타이머 — 분을 정하고 시작':'순공 타이머 준비됨';
+  resetDisplay();
+}
+function resetDisplay(){
+  const min=parseInt($('tMin').value);
+  $('tDisp').textContent=fmtClock(min>0?min*60:0);
+}
+
+function beep(n){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended')audioCtx.resume();
+    let t=audioCtx.currentTime;
+    for(let i=0;i<n;i++){
+      const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+      o.type='sine';o.frequency.value=tMode==='break'?620:880;
+      o.connect(g);g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.35,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.28);
+      o.start(t);o.stop(t+0.3);t+=0.4;
+    }
+  }catch(e){}
+}
+
 function tElapsed(){return tAccum+(tRun?(Date.now()-tStartEpoch)/1000:0);}
-function tRender(){document.getElementById('tDisp').textContent=secToClock(tElapsed());}
+function tRender(){
+  const el=tElapsed();
+  if(tTarget>0){
+    const rem=tTarget-el;
+    $('tDisp').textContent=fmtClock(Math.max(0,rem));
+    if(rem<=0){timerFinish();return;}
+  }else{
+    $('tDisp').textContent=fmtClock(el);
+  }
+}
+
 function timerStart(){
-  if(tRun)return;tRun=true;tStartEpoch=Date.now();
-  document.getElementById('timerBox').classList.add('run');
-  document.getElementById('tState').textContent='⏳ 집중하는 중… 화이팅!';
-  document.getElementById('tStart').disabled=true;
-  document.getElementById('tPause').disabled=false;
-  document.getElementById('tStop').disabled=false;
-  document.getElementById('tDay').disabled=true;
+  if(tRun)return;
+  const min=parseInt($('tMin').value);
+  if(tMode==='break' && !(min>0)){$('tState').textContent='휴식 시간을 분으로 입력해줘 (예: 10)';return;}
+  if(tAccum===0)tTarget=(min>0)?min*60:0;                 // 새로 시작할 때만 목표 설정
+  audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();       // 소리 잠금 해제
+  tRun=true;tStartEpoch=Date.now();
+  $('timerBox').classList.add('run');
+  $('tState').textContent=tMode==='break'?'☕ 휴식 중… 잠깐 쉬어가자':'⏳ 집중하는 중… 화이팅!';
+  $('tStart').disabled=true;$('tPause').disabled=false;$('tStop').disabled=false;
+  setCfgDisabled(true);
   tInt=setInterval(tRender,250);tRender();
 }
 function timerPause(){
   if(!tRun)return;tAccum+=(Date.now()-tStartEpoch)/1000;tRun=false;clearInterval(tInt);
-  document.getElementById('timerBox').classList.remove('run');
-  document.getElementById('tState').textContent='⏸ 일시정지됨 — 다시 시작하면 이어져요';
-  document.getElementById('tStart').disabled=false;
-  document.getElementById('tPause').disabled=true;
+  $('timerBox').classList.remove('run');
+  $('tState').textContent='⏸ 일시정지 — 다시 시작하면 이어져요';
+  $('tStart').disabled=false;$('tPause').disabled=true;
   tRender();
 }
-function timerStop(){
+function timerStop(){                                        // 수동 정지
   const secs=Math.round(tElapsed());
-  if(secs<1){resetTimer();return;}
-  const key=document.getElementById('tDay').value;
-  const subj=document.getElementById('tSubj').value;
-  const rec=day(key);
-  rec.seconds=(rec.seconds||0)+secs;                       // 누적
+  if(tMode==='study'){
+    if(secs<1){resetTimer();return;}
+    recordStudy(secs,false);
+  }else{
+    $('tState').textContent='휴식 취소됨';
+    resetTimer(true);
+  }
+}
+function timerFinish(){                                      // 카운트다운 0 도달
+  clearInterval(tInt);tRun=false;
+  if(tMode==='study'){
+    recordStudy(Math.round(tTarget),true);                  // 목표시간 전체를 순공시간으로
+  }else{
+    beep(4);
+    $('timerBox').classList.remove('run');
+    $('tState').textContent='☕ 휴식 끝! 다시 공부하자 💪';
+    resetTimer(true);
+  }
+}
+function recordStudy(secs,finished){
+  const key=$('tDay').value,subj=$('tSubj').value,rec=day(key);
+  rec.seconds=(rec.seconds||0)+secs;                        // 누적
   rec.sessions.push({subj,sec:secs,at:Date.now()});
   save();
-  document.getElementById('tState').textContent=`✅ ${subj} ${secToHM(secs)} 기록됨! (누적 ${secToHM(rec.seconds)})`;
-  resetTimer(true);renderWeek();if(!document.getElementById('viewCal').classList.contains('hide'))renderCal();
+  if(finished)beep(3);
+  $('tState').textContent=`✅ ${subj} ${secToHM(secs)} 기록! (누적 ${secToHM(rec.seconds)})`;
+  resetTimer(true);renderWeek();
+  if(!$('viewCal').classList.contains('hide'))renderCal();
 }
 function resetTimer(keepMsg){
-  tRun=false;tAccum=0;clearInterval(tInt);
-  document.getElementById('timerBox').classList.remove('run');
-  document.getElementById('tDisp').textContent='00:00:00';
-  if(!keepMsg)document.getElementById('tState').textContent='순공 타이머 준비됨';
-  document.getElementById('tStart').disabled=false;
-  document.getElementById('tPause').disabled=true;
-  document.getElementById('tStop').disabled=true;
-  document.getElementById('tDay').disabled=false;
+  tRun=false;tAccum=0;tTarget=0;clearInterval(tInt);
+  $('timerBox').classList.remove('run');
+  $('tStart').disabled=false;$('tPause').disabled=true;$('tStop').disabled=true;
+  setCfgDisabled(false);
+  if(!keepMsg)$('tState').textContent=tMode==='break'?'휴식 타이머 — 분을 정하고 시작':'순공 타이머 준비됨';
+  resetDisplay();
 }
-document.getElementById('tDay').addEventListener('change',syncSubjOptions);
+function setCfgDisabled(d){$('tDay').disabled=d;$('tMin').disabled=d;}
+$('tDay').addEventListener('change',syncSubjOptions);
+$('tMin').addEventListener('input',()=>{if(timerIdle())resetDisplay();});
 
 /* ================= CALENDAR HISTORY ================= */
 function renderCal(){
