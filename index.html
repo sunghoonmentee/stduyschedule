@@ -63,6 +63,16 @@
   .tcfg input:focus,.tcfg select:focus{outline:none;border-color:var(--accent)}
   #tMin{width:118px}
   .timer.breakmode .studyOnly{display:none}
+  .timer.breakmode .studyMethodOnly{display:none}
+  .tcfg .countdownOnly{display:none}
+  .timer.showmin .countdownOnly{display:flex}
+  .tmethod{display:flex;gap:4px;background:#12152a;border:1px solid var(--line);border-radius:9px;padding:3px}
+  .tmethod button{background:transparent;border:none;color:var(--muted);padding:7px 10px;border-radius:6px;
+    cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;transition:.12s}
+  .tmethod button.on{background:var(--accent2);color:#04210f}
+  .tmethod button:disabled{cursor:not-allowed}
+  .todaylabel{background:#12152a;border:1px solid var(--line);border-radius:10px;padding:8px 11px;
+    font-size:13px;font-weight:700;color:var(--accent2);white-space:nowrap}
   .timer .ctrls{display:flex;gap:7px;margin-left:auto}
   .timer .ctrls .btn{padding:9px 14px}
 
@@ -172,9 +182,14 @@
       <div class="state" id="tState">순공 타이머 준비됨</div>
     </div>
     <div class="tcfg">
-      <div class="fr"><label id="minLabel">시간(분)</label>
-        <input id="tMin" type="number" min="1" max="600" inputmode="numeric" placeholder="비우면 스톱워치"></div>
-      <div class="fr studyOnly"><label>기록할 날</label><select id="tDay"></select></div>
+      <div class="fr studyMethodOnly"><label>방식</label>
+        <div class="tmethod">
+          <button id="mStop" class="on" onclick="setMethod(false)">⏱ 스톱워치</button>
+          <button id="mCount" onclick="setMethod(true)">⏲ 시간 정하기</button>
+        </div></div>
+      <div class="fr countdownOnly"><label id="minLabel">시간(분)</label>
+        <input id="tMin" type="number" min="1" max="600" inputmode="numeric" placeholder="예: 25"></div>
+      <div class="fr studyOnly"><label>기록 날짜</label><div class="todaylabel" id="tTodayLabel">오늘</div></div>
       <div class="fr studyOnly"><label>과목</label><select id="tSubj"></select></div>
     </div>
     <div class="ctrls">
@@ -197,8 +212,9 @@
     </div>
     <div class="week" id="weekGrid"></div>
     <div class="tip">💡 각 요일 칸에 <b>하고 싶은 과목</b>을 적어두고(엔터 또는 + 버튼), 공부를 끝내면
-      체크(✓)해서 완료 표시해요. 위 타이머의 <b>📖순공</b> 모드로 잰 시간은 그 날 순공시간에 자동으로 쌓이고,
-      쉴 땐 <b>☕휴식</b> 모드로 분(예: 10)을 입력하면 카운트다운 후 소리로 알려줘요.</div>
+      체크(✓)해서 완료 표시해요. 타이머 <b>📖순공</b>은 <b>⏱스톱워치</b>(그냥 재기)와 <b>⏲시간 정하기</b>(분 입력) 중
+      고를 수 있고, 잰 시간은 <b>오늘</b> 순공시간에 쌓이며 그 과목이 오늘 일정에 자동으로 완료 표시돼요.
+      쉴 땐 <b>☕휴식</b> 모드로 분을 입력하면 카운트다운 후 소리로 알려줘요.</div>
   </div>
 
   <!-- ============ CALENDAR HISTORY ============ -->
@@ -307,30 +323,25 @@ function thisWeek(){weekRef=mondayOf(new Date());renderWeek();}
 
 /* ================= TIMER (순공 스톱워치/카운트다운 + 휴식) ================= */
 let tMode='study';                                 // 'study' | 'break'
+let tCountdown=false;                               // 순공 방식: false=스톱워치, true=시간 정하기
 let tRun=false,tStartEpoch=0,tAccum=0,tInt=null,tTarget=0; // tTarget: 0=스톱워치, >0=카운트다운(초)
 let audioCtx=null;
 const $=id=>document.getElementById(id);
 const timerIdle=()=>!tRun && tAccum===0;
+const isCountdown=()=>tMode==='break' || tCountdown;   // 휴식은 항상 카운트다운
+const todayKey=()=>ymd(new Date());                    // 타이머는 항상 오늘에만 기록
 function fmtClock(sec){sec=Math.max(0,Math.round(sec));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
   return h?`${h}:${pad(m)}:${pad(s)}`:`${pad(m)}:${pad(s)}`;}
 
+// 오늘 날짜 라벨 + 과목 목록 갱신 (renderWeek에서 호출)
 function refreshTimerDaySelect(){
-  const sel=$('tDay');const prev=sel.value;
-  sel.innerHTML='';
-  for(let i=0;i<7;i++){
-    const d=new Date(weekRef);d.setDate(weekRef.getDate()+i);
-    const key=ymd(d);const o=document.createElement('option');o.value=key;
-    o.textContent=`${DOW[i]} (${d.getMonth()+1}/${d.getDate()})`;sel.appendChild(o);
-  }
-  const todayKey=ymd(new Date());
-  sel.value=(prev&&[...sel.options].some(o=>o.value===prev))?prev
-           :([...sel.options].some(o=>o.value===todayKey)?todayKey:sel.options[0].value);
+  const t=new Date();
+  $('tTodayLabel').textContent=`오늘 · ${t.getMonth()+1}/${t.getDate()} (${DOW[(t.getDay()+6)%7]})`;
   syncSubjOptions();
 }
 function syncSubjOptions(){
   const sel=$('tSubj');const prev=sel.value;sel.innerHTML='';
-  const key=$('tDay').value;
-  const plans=(data.days[key]?.plans||[]).map(p=>p.name);
+  const plans=(data.days[todayKey()]?.plans||[]).map(p=>p.name);
   const list=[...new Set([...plans,...SUBJECTS])];
   list.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;sel.appendChild(o);});
   if(prev&&list.includes(prev))sel.value=prev;
@@ -342,15 +353,21 @@ function setMode(m){
   $('modeStudy').classList.toggle('on',m==='study');
   $('modeBreak').classList.toggle('on',m==='break');
   $('timerBox').classList.toggle('breakmode',m==='break');
-  const min=$('tMin');
-  if(m==='break'){if(!(parseInt(min.value)>0))min.value=10;min.placeholder='예: 10';}
-  else{min.placeholder='비우면 스톱워치';}
+  if(m==='break' && !(parseInt($('tMin').value)>0))$('tMin').value=10;
   $('tState').textContent=m==='break'?'휴식 타이머 — 분을 정하고 시작':'순공 타이머 준비됨';
-  resetDisplay();
+  updateMinVisibility();resetDisplay();
 }
+function setMethod(cd){                                  // 순공 방식 토글
+  if(!timerIdle()){$('tState').textContent='타이머를 먼저 ⏹정지해줘';return;}
+  tCountdown=cd;
+  $('mStop').classList.toggle('on',!cd);
+  $('mCount').classList.toggle('on',cd);
+  updateMinVisibility();resetDisplay();
+}
+function updateMinVisibility(){$('timerBox').classList.toggle('showmin',isCountdown());}
 function resetDisplay(){
   const min=parseInt($('tMin').value);
-  $('tDisp').textContent=fmtClock(min>0?min*60:0);
+  $('tDisp').textContent=fmtClock(isCountdown()&&min>0?min*60:0);
 }
 
 function beep(n){
@@ -385,8 +402,10 @@ function tRender(){
 function timerStart(){
   if(tRun)return;
   const min=parseInt($('tMin').value);
-  if(tMode==='break' && !(min>0)){$('tState').textContent='휴식 시간을 분으로 입력해줘 (예: 10)';return;}
-  if(tAccum===0)tTarget=(min>0)?min*60:0;                 // 새로 시작할 때만 목표 설정
+  if(isCountdown() && !(min>0)){
+    $('tState').textContent=tMode==='break'?'휴식 시간을 분으로 입력해줘 (예: 10)':'공부할 시간을 분으로 입력해줘 (예: 25)';return;
+  }
+  if(tAccum===0)tTarget=isCountdown()?min*60:0;           // 새로 시작할 때만 목표 설정
   audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
   if(audioCtx.state==='suspended')audioCtx.resume();       // 소리 잠금 해제
   tRun=true;tStartEpoch=Date.now();
@@ -425,9 +444,12 @@ function timerFinish(){                                      // 카운트다운 
   }
 }
 function recordStudy(secs,finished){
-  const key=$('tDay').value,subj=$('tSubj').value,rec=day(key);
+  const key=todayKey(),subj=$('tSubj').value,rec=day(key);   // 항상 오늘에 기록
   rec.seconds=(rec.seconds||0)+secs;                        // 누적
   rec.sessions.push({subj,sec:secs,at:Date.now()});
+  // 타이머로 잰 과목을 오늘 일정(계획)에 반영: 있으면 완료 체크, 없으면(기타 등) 완료 상태로 추가
+  const found=rec.plans.find(p=>p.name===subj);
+  if(found)found.done=true; else rec.plans.push({name:subj,done:true});
   save();
   if(finished)beep(3);
   $('tState').textContent=`✅ ${subj} ${secToHM(secs)} 기록! (누적 ${secToHM(rec.seconds)})`;
@@ -442,8 +464,10 @@ function resetTimer(keepMsg){
   if(!keepMsg)$('tState').textContent=tMode==='break'?'휴식 타이머 — 분을 정하고 시작':'순공 타이머 준비됨';
   resetDisplay();
 }
-function setCfgDisabled(d){$('tDay').disabled=d;$('tMin').disabled=d;}
-$('tDay').addEventListener('change',syncSubjOptions);
+function setCfgDisabled(d){
+  $('tMin').disabled=d;
+  ['modeStudy','modeBreak','mStop','mCount'].forEach(id=>$(id).disabled=d);
+}
 $('tMin').addEventListener('input',()=>{if(timerIdle())resetDisplay();});
 
 /* ================= CALENDAR HISTORY ================= */
