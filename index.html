@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>순공 플래너 — 주간 공부계획표</title>
+<!-- PWA (설치형 앱) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6c7dff">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="순공플래너">
 <style>
   :root{
     --bg:#0f1220; --panel:#191d33; --panel2:#20254173; --line:#2b3155;
@@ -540,6 +548,11 @@ function importData(e){
   r.readAsText(f);
 }
 window.addEventListener('beforeunload',e=>{if(tRun){e.preventDefault();e.returnValue='';}});
+
+// 서비스워커 등록 (오프라인 + 설치형 앱)
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 
 renderWeek();
 </script>
