@@ -253,7 +253,7 @@
     </div>
     <div class="mbody hide" id="mBody">
       <div class="mrow">
-        <input id="ytQuery" placeholder="노래 검색 (예: 공부할 때 듣는 노래) 또는 유튜브 링크 붙여넣기"
+        <input id="ytQuery" placeholder="노래 검색 (예: 공부할 때 듣는 노래) 또는 유튜브 링크"
                onkeydown="if(event.key==='Enter')ytGo()">
         <button class="btn primary" onclick="ytGo()">▶ 재생</button>
       </div>
@@ -797,34 +797,75 @@ function ytGo(){
   if(p.id||p.list){ytPlay(p,'붙여넣은 영상');$('ytResults').innerHTML='';return;}  // 링크면 바로 재생
   ytSearch(q);
 }
+/* 키 없이 검색: 유튜브를 대신 검색해주는 공개 서버(Piped)들을 순서대로 시도 */
+const PIPED_SERVERS=[
+  'https://api.piped.private.coffee',
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.adminforge.de',
+  'https://pipedapi.drgns.space',
+  'https://pipedapi.ducks.party',
+  'https://pipedapi.projectsegfau.lt'
+];
+const durFmt=s=>{if(!s||s<0)return'';const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=Math.floor(s%60);
+  return h?`${h}:${pad(m)}:${pad(x)}`:`${m}:${pad(x)}`;};
+async function fetchTimeout(url,ms){
+  const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);
+  try{return await fetch(url,{signal:c.signal});}finally{clearTimeout(t);}
+}
+async function searchNoKey(q){
+  for(const base of PIPED_SERVERS){
+    try{
+      const r=await fetchTimeout(`${base}/search?q=${encodeURIComponent(q)}&filter=videos`,7000);
+      if(!r.ok)continue;
+      const j=await r.json();
+      const items=(j.items||[]).filter(i=>i.url&&i.url.includes('v=')).slice(0,10).map(i=>({
+        id:i.url.split('v=')[1].split('&')[0],
+        title:i.title||'제목 없음',ch:i.uploaderName||'',thumb:i.thumbnail||'',dur:durFmt(i.duration)
+      }));
+      if(items.length)return items;
+    }catch(e){/* 이 서버는 건너뛰고 다음 서버 시도 */}
+  }
+  return null;
+}
+async function searchWithKey(q,key){
+  const url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q='
+    +encodeURIComponent(q)+'&key='+encodeURIComponent(key);
+  const r=await fetchTimeout(url,9000),j=await r.json();
+  if(j.error)throw new Error(j.error.message||'API 키를 확인해줘');
+  return (j.items||[]).filter(i=>i.id&&i.id.videoId).map(i=>({
+    id:i.id.videoId,title:i.snippet.title,ch:i.snippet.channelTitle,
+    thumb:i.snippet.thumbnails.default.url,dur:''
+  }));
+}
+function renderYtResults(items){
+  $('ytResults').innerHTML=items.map(v=>{
+    const t=esc(v.title).replace(/'/g,'&#39;');
+    return `<div class="ytitem" onclick="ytPlayFromResult('${v.id}',this)" data-title="${t}">
+      ${v.thumb?`<img src="${esc(v.thumb)}" alt="" loading="lazy" onerror="this.style.display='none'">`:''}
+      <div><div class="yt">${esc(v.title)}</div>
+        <div class="yc">${esc(v.ch)}${v.dur?' · '+v.dur:''}</div></div></div>`;
+  }).join('');
+}
+function ytPlayFromResult(id,el){ytPlay({id},el.dataset.title||'유튜브 영상');}
 async function ytSearch(q){
   const key=(ytCfg().apiKey||'').trim();
   const res=$('ytResults');
-  if(!key){                                    // 키가 없으면 유튜브에서 찾아 링크 붙여넣도록 안내
-    res.innerHTML=`<div class="mhint">🔍 검색은 유튜브 API 키가 있어야 해요.
-      아래 <b>검색 기능 켜기</b>에서 키를 넣거나, 유튜브에서 노래를 찾아 <b>링크를 복사해 붙여넣기</b>하면 바로 재생돼요.
+  res.innerHTML='<div class="mhint">🔎 검색 중…</div>';
+  try{
+    let items=null;
+    if(key){                                   // 키를 넣었으면 공식 API 우선 (제일 안정적)
+      try{items=await searchWithKey(q,key);}
+      catch(e){res.innerHTML=`<div class="mhint">⚠️ ${esc(e.message)} — 다른 방법으로 다시 시도할게요…</div>`;}
+    }
+    if(!items||!items.length)items=await searchNoKey(q);   // 키 없이 검색
+    if(items&&items.length){renderYtResults(items);return;}
+    res.innerHTML=`<div class="mhint">😢 지금은 검색 서버가 응답하지 않아요.
+      아래 버튼으로 유튜브에서 찾아 <b>링크를 복사해 붙여넣기</b>하면 바로 재생돼요.
+      (또는 ⚙️에서 API 키를 등록하면 항상 검색할 수 있어요)
       <div style="margin-top:7px"><a class="btn ghost" style="font-size:12px" target="_blank" rel="noopener"
         href="https://www.youtube.com/results?search_query=${encodeURIComponent(q)}">유튜브에서 "${esc(q)}" 검색 열기 ↗</a></div></div>`;
-    return;
-  }
-  res.innerHTML='<div class="mhint">검색 중…</div>';
-  try{
-    const url='https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q='
-      +encodeURIComponent(q)+'&key='+encodeURIComponent(key);
-    const r=await fetch(url),j=await r.json();
-    if(j.error){
-      res.innerHTML=`<div class="mhint">⚠️ 검색 실패: ${esc(j.error.message||'키를 확인해줘')}</div>`;return;
-    }
-    const items=(j.items||[]).filter(i=>i.id&&i.id.videoId);
-    if(!items.length){res.innerHTML='<div class="mhint">결과가 없어요.</div>';return;}
-    res.innerHTML=items.map(i=>{
-      const id=i.id.videoId,sn=i.snippet;
-      return `<div class="ytitem" onclick="ytPlay({id:'${id}'},'${esc(sn.title).replace(/'/g,"\\'")}')">
-        <img src="${sn.thumbnails.default.url}" alt="">
-        <div><div class="yt">${esc(sn.title)}</div><div class="yc">${esc(sn.channelTitle)}</div></div></div>`;
-    }).join('');
   }catch(e){
-    res.innerHTML='<div class="mhint">⚠️ 검색 중 오류가 났어요. 인터넷을 확인해줘.</div>';
+    res.innerHTML='<div class="mhint">⚠️ 검색 중 오류가 났어요. 인터넷 연결을 확인해줘.</div>';
   }
 }
 function renderYtHint(){
@@ -833,9 +874,10 @@ function renderYtHint(){
     ${c.recent.map(r=>`<button class="qbtn" style="margin:3px 3px 0 0"
       onclick="ytPlay({id:'${r.id}'},'${esc(r.title).replace(/'/g,"\\'")}')">${esc(r.title.slice(0,22))}</button>`).join('')}</div>`:'';
   $('ytHint').innerHTML=recent+
-    `<details><summary style="cursor:pointer">⚙️ 검색 기능 켜기 (유튜브 API 키) ${has?'✅ 켜짐':''}</summary>
+    `<details><summary style="cursor:pointer">⚙️ 검색이 잘 안 될 때 (내 API 키 등록) ${has?'✅ 등록됨':''}</summary>
       <div style="margin-top:7px;line-height:1.7">
-        키가 없어도 <b>유튜브 링크를 붙여넣으면</b> 바로 재생돼요. 앱 안에서 <b>검색</b>까지 하고 싶으면:<br>
+        보통은 <b>그냥 검색하면 바로</b> 돼요. 다만 검색을 도와주는 공개 서버가 가끔 멈출 수 있는데,
+        내 <b>유튜브 API 키</b>를 등록해두면 그럴 때도 항상 검색돼요. (무료)<br>
         ① <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a>에서
         YouTube Data API v3 사용 설정 → ② 사용자 인증 정보에서 <b>API 키</b> 만들기 → ③ 아래에 붙여넣기<br>
         <input id="ytKeyInput" placeholder="여기에 API 키 붙여넣기" value="${esc(c.apiKey||'')}">
