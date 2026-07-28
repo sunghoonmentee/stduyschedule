@@ -1,5 +1,5 @@
 /* 순공 플래너 서비스워커 — 오프라인 지원 + 자동 업데이트 */
-const CACHE = 'sungong-v1';
+const CACHE = 'sungong-v2';
 const ASSETS = [
   './', './index.html', './manifest.json',
   './icon.svg', './icon-192.png', './icon-512.png'
@@ -20,6 +20,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // 외부 요청(유튜브 등)은 건드리지 않고 그대로 통과
+  if (new URL(req.url).origin !== self.location.origin) return;
   e.respondWith(
     fetch(req).then(res => {
       const copy = res.clone();
