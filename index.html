@@ -110,10 +110,14 @@
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
   .ytitem .yc{font-size:11px;color:var(--muted);margin-top:2px}
   #ytPlayerWrap{margin-bottom:10px}
-  #ytPlayer{width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
-  #ytPlayer iframe{width:100%;height:100%;border:0}
-  .mplayctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+  /* 유튜브가 iframe에 width/height 속성을 넣기 때문에 !important로 16:9를 유지 */
+  #ytPlayer{width:100%!important;height:auto!important;aspect-ratio:16/9;
+    border:0;border-radius:12px;overflow:hidden;background:#000;display:block}
+  .mplayctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .mplayctrl .btn,.mplayctrl a.btn{font-size:12.5px;padding:7px 12px;text-decoration:none;display:inline-block}
   .mnote{font-size:11px;color:var(--muted)}
+  .ytstatus{font-size:12px;color:var(--accent2);font-weight:700;margin-top:7px;min-height:16px}
+  .ytstatus.warn{color:var(--gold)}
   .mhint{font-size:11.5px;color:var(--muted);line-height:1.6}
   .mhint a{color:var(--accent2)}
   .mhint input{background:#12152a;border:1px solid var(--line);color:var(--text);
@@ -267,8 +271,11 @@
       <div id="ytResults" class="ytres"></div>
       <div id="ytPlayerWrap" class="hide">
         <div id="ytPlayer"></div>
+        <div class="ytstatus" id="ytStatus"></div>
         <div class="mplayctrl">
+          <button class="btn green hide" id="ytTapPlay" onclick="ytTapPlay()">▶ 재생</button>
           <button class="btn ghost" onclick="ytStop()">⏹ 음악 끄기</button>
+          <a class="btn ghost hide" id="ytOpenLink" target="_blank" rel="noopener">유튜브에서 열기 ↗</a>
           <span class="mnote">화면이 꺼지면 음악도 멈춰요 (폰 정책). 타이머 실행 중엔 화면이 켜져 있어요.</span>
         </div>
       </div>
@@ -733,7 +740,7 @@ window.addEventListener('beforeunload',e=>{if(tRun){e.preventDefault();e.returnV
 
 /* ================= 공부 음악 (YouTube) ================= */
 const YKEY='sungong_yt_v1';
-let ytCfgCache=null,ytPlayer=null,ytApiLoading=false;
+let ytCfgCache=null,ytPlayer=null,ytApiLoading=false,ytLastResults=[];
 function ytCfg(){
   if(!ytCfgCache){try{ytCfgCache=JSON.parse(localStorage.getItem(YKEY)||'{}');}catch(e){ytCfgCache={};}}
   if(!ytCfgCache.recent)ytCfgCache.recent=[];
@@ -745,7 +752,7 @@ function toggleMusic(){
   const b=$('mBody'),open=b.classList.contains('hide');
   b.classList.toggle('hide',!open);
   $('mToggle').textContent=open?'접기 ▴':'펼치기 ▾';
-  if(open)renderYtHint();
+  if(open){renderYtHint();ytPrewarm();}        // 미리 준비 → 탭하면 바로 소리 나게
 }
 // 유튜브 링크/ID 파싱 (키 없이도 재생 가능)
 function ytParse(s){
@@ -756,33 +763,111 @@ function ytParse(s){
   if(m)id=m[1]; else if(/^[\w-]{11}$/.test(s))id=s;
   return {id,list:list?list[1]:null};
 }
-function ytLoadAPI(cb){
-  if(window.YT&&window.YT.Player){cb();return;}
-  window.onYouTubeIframeAPIReady=cb;
-  if(ytApiLoading)return; ytApiLoading=true;
-  const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';
-  s.onerror=()=>{$('ytHint').innerHTML='⚠️ 유튜브를 불러오지 못했어요. 인터넷 연결을 확인해줘.';};
-  document.head.appendChild(s);
+let ytApiCbs=[],ytCur=null,ytPlayTimer=null,ytCreating=false,ytPending=null;
+function ytLoadAPI(){
+  return new Promise((resolve,reject)=>{
+    if(window.YT&&window.YT.Player){resolve();return;}
+    ytApiCbs.push(resolve);
+    if(ytApiLoading)return; ytApiLoading=true;
+    window.onYouTubeIframeAPIReady=()=>{ytApiCbs.forEach(f=>f());ytApiCbs=[];};
+    const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';
+    s.onerror=()=>{ytSetStatus('⚠️ 유튜브를 불러오지 못했어요. 인터넷 연결을 확인해줘.',true);reject(new Error('load'));};
+    document.head.appendChild(s);
+  });
 }
-function ytPlay(opt,title){
-  $('ytPlayerWrap').classList.remove('hide');
-  ytLoadAPI(()=>{
-    const vars={autoplay:1,playsinline:1,rel:0};
-    if(ytPlayer&&ytPlayer.loadVideoById){
-      if(opt.list)ytPlayer.loadPlaylist({list:opt.list}); else ytPlayer.loadVideoById(opt.id);
-    }else{
-      ytPlayer=new YT.Player('ytPlayer',{
-        videoId:opt.id||undefined,
-        playerVars:opt.list?{...vars,list:opt.list,listType:'playlist'}:vars,
-        events:{onReady:e=>{try{e.target.playVideo();}catch(err){}}}
-      });
+/* 유튜브 스크립트를 미리 받아둔다 — 탭한 뒤 로딩을 기다리면
+   '사용자가 누른 직후'라는 자격이 사라져서 브라우저가 소리를 막아버림 */
+function ytPrewarm(){ytLoadAPI().catch(()=>{});}
+function ytPlayerUsable(){return !!(ytPlayer&&typeof ytPlayer.loadVideoById==='function');}
+function ytCreatePlayer(opt){
+  const vars={autoplay:1,playsinline:1,rel:0,origin:location.origin};
+  ytCreating=true;
+  ytPlayer=new YT.Player('ytPlayer',{
+    videoId:opt.id||undefined,
+    playerVars:opt.list?{...vars,list:opt.list,listType:'playlist'}:vars,
+    events:{
+      onReady:e=>{
+        ytCreating=false;
+        try{
+          if(ytPending){                        // 준비되는 동안 다른 곡을 골랐다면 그걸로
+            if(ytPending.list)e.target.loadPlaylist({list:ytPending.list});
+            else e.target.loadVideoById(ytPending.id);
+            ytPending=null;
+          }
+          e.target.playVideo();
+        }catch(x){}
+      },
+      onError:e=>ytOnError(e.data),
+      onStateChange:e=>ytOnState(e.data)
     }
   });
+}
+function ytSetStatus(msg,warn){
+  const el=$('ytStatus');if(!el)return;
+  el.innerHTML=msg||'';el.className='ytstatus'+(warn?' warn':'');
+}
+function ytOnState(s){
+  if(s===1){                                   // 재생 시작됨
+    clearTimeout(ytPlayTimer);
+    ytSetStatus(ytCur?`🎧 재생 중 · ${esc(ytCur.title.slice(0,30))}`:'🎧 재생 중');
+    $('ytTapPlay').classList.add('hide');
+  }
+}
+function ytOnError(code){
+  clearTimeout(ytPlayTimer);
+  const msg=(code===101||code===150)?'이 영상은 다른 앱에서 재생이 막혀 있어요.'
+    :code===100?'영상을 찾을 수 없어요.':'재생 중 문제가 생겼어요.';
+  const idx=ytLastResults.findIndex(v=>ytCur&&v.id===ytCur.id);
+  if(idx>=0&&idx<ytLastResults.length-1){       // 다음 곡으로 자동 넘김
+    const nx=ytLastResults[idx+1];
+    ytSetStatus(`${msg} 다음 곡으로 넘어갈게요 →`,true);
+    setTimeout(()=>ytPlay({id:nx.id},nx.title),400);
+  }else{
+    ytSetStatus(`${msg} 아래 <b>유튜브에서 열기</b>로 들어보세요.`,true);
+  }
+  ytUpdateOpenLink();
+}
+function ytUpdateOpenLink(){
+  const a=$('ytOpenLink');if(!a)return;
+  if(ytCur){a.href='https://www.youtube.com/watch?v='+ytCur.id;a.classList.remove('hide');}
+  else a.classList.add('hide');
+}
+// 탭한 그 순간 바로 재생시킨다 (기다리면 소리 재생 권한을 잃음)
+function ytPlay(opt,title){
+  $('ytPlayerWrap').classList.remove('hide');
+  ytCur=opt.id?{id:opt.id,title:title||'유튜브 영상'}:null;
+  ytUpdateOpenLink();
+  ytSetStatus('▶ 불러오는 중…');
+  const go=()=>{
+    try{
+      if(ytPlayerUsable()){
+        if(opt.list)ytPlayer.loadPlaylist({list:opt.list});
+        else{ytPlayer.loadVideoById(opt.id);ytPlayer.playVideo();}
+      }else if(ytCreating){ytPending=opt;}      // 만드는 중이면 준비되는 대로 재생
+      else ytCreatePlayer(opt);
+    }catch(e){}
+    clearTimeout(ytPlayTimer);
+    ytPlayTimer=setTimeout(()=>{                // 자동재생이 막혔으면 탭 버튼 노출
+      try{
+        if(!ytPlayerUsable()||ytPlayer.getPlayerState()!==1){
+          $('ytTapPlay').classList.remove('hide');
+          ytSetStatus('🔇 폰이 자동재생을 막았어요 — 아래 <b>▶ 재생</b>을 눌러줘',true);
+        }
+      }catch(e){}
+    },2500);
+  };
+  if(window.YT&&window.YT.Player)go();          // 스크립트가 준비돼 있으면 즉시(소리 O)
+  else ytLoadAPI().then(go).catch(()=>ytSetStatus('⚠️ 유튜브를 불러오지 못했어요. 인터넷을 확인해줘.',true));
   if(opt.id)ytAddRecent(opt.id,title||'유튜브 영상');
+}
+function ytTapPlay(){                            // 사용자가 직접 누르는 재생 = 항상 소리 남
+  try{ytPlayer.unMute&&ytPlayer.unMute();ytPlayer.playVideo();}catch(e){}
+  $('ytTapPlay').classList.add('hide');
 }
 function ytStop(){
   try{if(ytPlayer&&ytPlayer.stopVideo)ytPlayer.stopVideo();}catch(e){}
-  $('ytPlayerWrap').classList.add('hide');
+  clearTimeout(ytPlayTimer);ytCur=null;
+  $('ytPlayerWrap').classList.add('hide');ytSetStatus('');
 }
 function ytAddRecent(id,title){
   const c=ytCfg();
@@ -838,6 +923,7 @@ async function searchWithKey(q,key){
   }));
 }
 function renderYtResults(items){
+  ytLastResults=items;                       // 재생 실패 시 다음 곡으로 넘기기 위해 보관
   $('ytResults').innerHTML=items.map(v=>{
     const t=esc(v.title).replace(/'/g,'&#39;');
     return `<div class="ytitem" onclick="ytPlayFromResult('${v.id}',this)" data-title="${t}">
@@ -892,9 +978,20 @@ function ytSaveKey(){
   $('ytResults').innerHTML=`<div class="mhint">${v?'✅ 검색 기능이 켜졌어요! 이제 검색해보세요.':'키를 지웠어요.'}</div>`;
 }
 
-// 서비스워커 등록 (오프라인 + 설치형 앱)
+// 서비스워커 등록 (오프라인 + 설치형 앱) — 새 버전이 올라오면 자동으로 갱신
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  const hadController=!!navigator.serviceWorker.controller;
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!hadController||reloaded)return;         // 첫 설치 때는 새로고침하지 않음
+    reloaded=true;location.reload();            // 새 버전이 적용되면 화면을 갱신
+  });
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      reg.update();                             // 열 때마다 새 버전 확인
+      setInterval(()=>reg.update(),30*60*1000);
+    }).catch(()=>{});
+  });
 }
 
 renderWeek();

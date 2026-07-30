@@ -1,12 +1,16 @@
 /* 순공 플래너 서비스워커 — 오프라인 지원 + 자동 업데이트 */
-const CACHE = 'sungong-v2';
+const CACHE = 'sungong-v3';
 const ASSETS = [
   './', './index.html', './manifest.json',
   './icon.svg', './icon-192.png', './icon-512.png'
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -22,8 +26,15 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   // 외부 요청(유튜브 등)은 건드리지 않고 그대로 통과
   if (new URL(req.url).origin !== self.location.origin) return;
+
+  // 앱 코드(HTML/JS/JSON)는 브라우저 HTTP 캐시를 건너뛰고 항상 새로 받아온다.
+  // (이걸 안 하면 오래된 버전이 계속 보여서 업데이트가 반영되지 않음)
+  const url = new URL(req.url);
+  const isCode = req.mode === 'navigate' || /\.(html|js|json)$/.test(url.pathname) || url.pathname.endsWith('/');
+  const fetchOpts = isCode ? { cache: 'no-store' } : undefined;
+
   e.respondWith(
-    fetch(req).then(res => {
+    fetch(fetchOpts ? new Request(req, fetchOpts) : req).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
       return res;
