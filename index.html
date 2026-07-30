@@ -118,6 +118,17 @@
   .mnote{font-size:11px;color:var(--muted)}
   .ytstatus{font-size:12px;color:var(--accent2);font-weight:700;margin-top:7px;min-height:16px}
   .ytstatus.warn{color:var(--gold)}
+  .amb{background:#12152a;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:11px}
+  .ambtitle{font-size:12.5px;font-weight:800;margin-bottom:8px}
+  .ambtitle span{font-size:10.5px;color:var(--muted);font-weight:600;margin-left:5px}
+  .ambrow{display:flex;flex-wrap:wrap;gap:6px}
+  .ambtn{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:20px;
+    padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:.12s}
+  .ambtn:hover{border-color:var(--accent2)}
+  .ambtn.on{background:var(--accent2);color:#04210f;border-color:transparent}
+  .ambvol{display:flex;align-items:center;gap:9px;margin-top:9px;font-size:11.5px;color:var(--muted)}
+  .ambvol input[type=range]{flex:1;accent-color:var(--accent2);min-width:0}
+  #ambVolNum{min-width:22px;text-align:right;font-weight:700}
   .mhint{font-size:11.5px;color:var(--muted);line-height:1.6}
   .mhint a{color:var(--accent2)}
   .mhint input{background:#12152a;border:1px solid var(--line);color:var(--text);
@@ -256,6 +267,23 @@
       <div class="mtoggle" id="mToggle">펼치기 ▾</div>
     </div>
     <div class="mbody hide" id="mBody">
+      <!-- 광고 없는 집중 사운드 (앱이 직접 소리를 만들어냄 · 오프라인 가능) -->
+      <div class="amb">
+        <div class="ambtitle">🔕 광고 없는 집중 사운드 <span>인터넷 없이도 재생 · 끊김 없음</span></div>
+        <div class="ambrow">
+          <button class="ambtn" data-amb="rain"  onclick="ambToggle('rain')">🌧️ 빗소리</button>
+          <button class="ambtn" data-amb="wave"  onclick="ambToggle('wave')">🌊 파도</button>
+          <button class="ambtn" data-amb="white" onclick="ambToggle('white')">💨 백색소음</button>
+          <button class="ambtn" data-amb="brown" onclick="ambToggle('brown')">🟤 저음소음</button>
+          <button class="ambtn" data-amb="fire"  onclick="ambToggle('fire')">🔥 장작불</button>
+        </div>
+        <div class="ambvol">
+          <span>음량</span>
+          <input type="range" id="ambVol" min="0" max="100" value="45" oninput="ambSetVol(this.value)">
+          <span id="ambVolNum">45</span>
+        </div>
+      </div>
+
       <div class="mrow">
         <input id="ytQuery" placeholder="노래 검색 (예: 공부할 때 듣는 노래) 또는 유튜브 링크"
                onkeydown="if(event.key==='Enter')ytGo()">
@@ -738,6 +766,80 @@ function importData(e){
 }
 window.addEventListener('beforeunload',e=>{if(tRun){e.preventDefault();e.returnValue='';}});
 
+/* ========== 광고 없는 집중 사운드 (앱이 직접 소리를 합성 · 오프라인 동작) ========== */
+const AMBKEY='sungong_amb_v1';
+let ambSrc=null,ambGain=null,ambMod=null,ambLfo=null,ambType=null,ambCrackle=null;
+function getAudio(){
+  audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  return audioCtx;
+}
+function noiseBuffer(ctx,kind){
+  const len=ctx.sampleRate*4,buf=ctx.createBuffer(1,len,ctx.sampleRate),d=buf.getChannelData(0);
+  if(kind==='white'){for(let i=0;i<len;i++)d[i]=Math.random()*2-1;}
+  else{                                        // brown noise — 낮고 부드러운 소리
+    let last=0;
+    for(let i=0;i<len;i++){const w=Math.random()*2-1;last=(last+0.02*w)/1.02;d[i]=last*3.5;}
+  }
+  return buf;
+}
+function ambVol(){const v=parseInt($('ambVol').value);return (isNaN(v)?45:v)/100*0.6;}
+function ambSetVol(v){
+  const n=Math.max(0,Math.min(100,parseInt(v)||0));
+  $('ambVol').value=n;$('ambVolNum').textContent=n;
+  localStorage.setItem(AMBKEY,n);
+  if(ambGain)ambGain.gain.value=n/100*0.6;
+}
+function ambCrackleTick(ctx){                  // 장작 타는 '탁탁' 소리
+  if(!ambGain||Math.random()>0.35)return;
+  const len=Math.floor(ctx.sampleRate*0.05),b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3);
+  const s=ctx.createBufferSource();s.buffer=b;
+  const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=1500;
+  const g=ctx.createGain();g.gain.value=0.25+Math.random()*0.35;
+  s.connect(hp);hp.connect(g);g.connect(ambGain);s.start();
+}
+function ambStopNodes(){
+  try{if(ambSrc){ambSrc.stop();ambSrc.disconnect();}}catch(e){}
+  try{if(ambLfo){ambLfo.stop();ambLfo.disconnect();}}catch(e){}
+  if(ambCrackle){clearInterval(ambCrackle);ambCrackle=null;}
+  ambSrc=ambLfo=ambGain=ambMod=null;
+}
+function ambUI(){document.querySelectorAll('.ambtn').forEach(b=>b.classList.toggle('on',b.dataset.amb===ambType));}
+function ambStop(){ambStopNodes();ambType=null;ambUI();}
+function ambToggle(type){
+  if(ambType===type){ambStop();return;}
+  ambStopNodes();
+  const ctx=getAudio();
+  const src=ctx.createBufferSource();
+  src.buffer=noiseBuffer(ctx,(type==='white'||type==='rain')?'white':'brown');
+  src.loop=true;
+  const master=ctx.createGain();master.gain.value=ambVol();
+  let node=src;
+  if(type==='rain'){
+    const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=1200;bp.Q.value=0.5;
+    const hp=ctx.createBiquadFilter();hp.type='highpass';hp.frequency.value=400;
+    node.connect(bp);bp.connect(hp);node=hp;
+  }else if(type==='brown'){
+    const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=320;
+    node.connect(lp);node=lp;
+  }else if(type==='fire'){
+    const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=700;
+    node.connect(lp);node=lp;
+  }else if(type==='wave'){                     // 느리게 밀려오는 파도
+    const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=600;
+    const mod=ctx.createGain();mod.gain.value=0.55;
+    const lfo=ctx.createOscillator();lfo.frequency.value=0.09;
+    const depth=ctx.createGain();depth.gain.value=0.45;
+    lfo.connect(depth);depth.connect(mod.gain);lfo.start();
+    node.connect(lp);lp.connect(mod);node=mod;ambLfo=lfo;ambMod=mod;
+  }
+  node.connect(master);master.connect(ctx.destination);
+  src.start();
+  ambSrc=src;ambGain=master;ambType=type;ambUI();
+  if(type==='fire')ambCrackle=setInterval(()=>ambCrackleTick(ctx),120);
+}
+
 /* ================= 공부 음악 (YouTube) ================= */
 const YKEY='sungong_yt_v1';
 let ytCfgCache=null,ytPlayer=null,ytApiLoading=false,ytLastResults=[];
@@ -996,6 +1098,7 @@ if('serviceWorker' in navigator){
 
 renderWeek();
 restoreTimerState();   // 앱을 다시 열어도 진행 중이던 타이머를 그대로 이어감
+(function(){const v=localStorage.getItem(AMBKEY);if(v!==null){$('ambVol').value=v;$('ambVolNum').textContent=v;}})();
 </script>
 </body>
 </html>
